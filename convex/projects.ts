@@ -125,3 +125,32 @@ export const getProjectStyleGuide = query({
         return projects.styleGuide ? JSON.parse(projects.styleGuide) : null
     }
 })
+
+export const updateProjectSketches = mutation({
+     args: {
+       projectId: v.id('projects'),
+       sketchesData: v.any(),
+       viewportData: v.optional(v.any())
+     },
+     handler: async(ctx, {projectId,sketchesData,viewportData}) => {
+         /* const userId = await getAuthUserId(ctx);
+         if(!userId) throw new Error('Not authenticated') */
+
+         const project = await ctx.db.get(projectId)
+         if(!project) throw new Error("Project Not found")
+
+          const updateData: any = {
+             sketchesData, 
+             lastModified:  Date.now()
+          }
+         if(viewportData) {
+           updateData.viewportData = viewportData
+         }
+       
+        await ctx.db.patch(projectId, updateData)
+        console.log("✅[COVEX]:Project auto-save successfull");
+        return { success: true }
+        
+
+     }
+})
