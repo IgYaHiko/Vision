@@ -122,7 +122,7 @@ const Navbar = () => {
     </AvatarFallback>
   </Avatar>
   {
-     !hasCanvas && (
+     hasCanvas && (
       <AutosaveButton/>
      )
   }

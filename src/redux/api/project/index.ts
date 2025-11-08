@@ -8,7 +8,7 @@ interface AutoSaveProjectResponse {
 interface AutoSaveProjectRequest {
      projectId: string;
      userId: string;
-     shapeData: {
+     shapesData: {
          shapes: Record<string, unknown>;
          tool: string;
          seleted: Record<string, unknown>;
@@ -34,3 +34,5 @@ export const projectAPI = createApi({
         })
      })
 })
+
+export const { useAutoSaveProjectMutation } = projectAPI
