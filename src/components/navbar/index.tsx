@@ -17,6 +17,7 @@ import { UseAuth } from '@/hooks/use-auth';
 import { useAppSelector } from '@/redux/store';
 import CreateProjectButton from '../button/create/CreateProjectButton';
 import { cn } from '@/lib/utils';
+import AutosaveButton from '../button/auto-save/auto-save-button';
 
 const Navbar = () => {
   const router = useRouter();
@@ -120,7 +121,11 @@ const Navbar = () => {
       <User className="h-4 w-4" />
     </AvatarFallback>
   </Avatar>
-
+  {
+     !hasCanvas && (
+      <AutosaveButton/>
+     )
+  }
   {
     !hasCanvas && !hasCanvasStyleGuide && 
       (
