@@ -130,9 +130,9 @@ export const updateProjectSketches = mutation({
      args: {
        projectId: v.id('projects'),
        sketchesData: v.any(),
-       viewportData: v.optional(v.any())
+       viewPortData: v.optional(v.any())
      },
-     handler: async(ctx, {projectId,sketchesData,viewportData}) => {
+     handler: async(ctx, {projectId,sketchesData,viewPortData}) => {
          /* const userId = await getAuthUserId(ctx);
          if(!userId) throw new Error('Not authenticated') */
 
@@ -143,8 +143,8 @@ export const updateProjectSketches = mutation({
              sketchesData, 
              lastModified:  Date.now()
           }
-         if(viewportData) {
-           updateData.viewportData = viewportData
+         if(viewPortData) {
+           updateData.viewPortData = viewPortData
          }
        
         await ctx.db.patch(projectId, updateData)
