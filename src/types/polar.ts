@@ -9,16 +9,17 @@ export interface PolarCustomerProps {
      email: string | null
 }
 
-export interface PolarProductProps {
-    id?: string | null
-    recurring_interval?: string | null
-}
 export interface PolarPriceProps {
-    id?: string | null;
-    name?: string | null
+     id?: string | null;
+     recurring_interval?: string | null
 }
 
-export interface PolarSubscription {
+export interface PolarProductProps {
+     id?: string | null;
+     name?: string | null
+}
+
+export interface PolarSubscriptionProps {
      id: string;
      status: string;
      current_period_end?: string | null;
@@ -27,11 +28,20 @@ export interface PolarSubscription {
      canceled_at?: string | null;
      customer?: PolarCustomerProps | null;
      customer_id?: string | null;
-     product?: PolarCustomerProps | null;
-     product_id: string | null;
+     product?: PolarProductProps | null;
+     product_id: string | null | undefined;
      prices?: PolarPriceProps[] | null;
-     seat?: string | null;
+     seat?: number | null;
      plan_code?: string | null;
-     metadata?: string | null;
+     metadata?: Record<string, unknown> | null
 
+}
+
+export interface PolarOrderProps {
+     id: string;
+     billing_reason?: string | null;
+     subsription_id?: string | null;
+     customer?: PolarCustomerProps | null;
+     customer_id?: string | null;
+     metadata?: Record<string, unknown> | null;
 }
