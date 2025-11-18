@@ -1,7 +1,7 @@
 import { fetchMutation, fetchQuery } from "convex/nextjs";
 import { inngest } from "./client";
 import { api } from "../../convex/_generated/api";
-import { extractOrder, extractSubscription, isPolarWebhookEvents } from "@/lib/polar";
+import { extractOrder, extractSubscription, isPolarWebhookEvents, toMs } from "@/lib/polar";
 import { PolarOrderProps, PolarSubscriptionProps, RecivedEvent } from "@/types/polar";
 import { Id } from "../../convex/_generated/dataModel";
 
@@ -114,6 +114,66 @@ export const paymentWithPolar = inngest.createFunction(
     return
    }
 
+     const currentPeriodEnd = toMs(sub?.current_period_end)
+     const payload = {
+          userId,
+          polarCustomerId: sub?.customer_id ?? order?.customer_id ?? '', polarSubscriptionId,
+          productId: sub?.product_id ?? sub?.product?.id ?? undefined,
+          priceId: sub?.prices?.[0]?.id ?? undefined,
+          plancode: sub?.plan_code ?? sub?.product?.name ?? undefined,
+          status: sub?.status ?? 'updated', currentPeriodEnd,
+          trialEndsAt: toMs(sub?.triel_ends_at),
+          cancelAt: toMs(sub?.cancel_at),
+          canceledAt: toMs(sub?.canceled_at),
+          seat: sub?.seat ?? undefined,
+          metadata: data,
+          creditsGrantPerPeriod: 10,
+          creditsRollOverLimit: 100,
 
+     }
+
+     console.log(
+      `[INNGEST]: Subscription Payload ${
+        JSON.stringify(payload, null, 2)
+      }`
+     )
+
+     const subscriptionId = await step.run('upsert-subscription', async() => {
+        try {
+          console.log(
+            `[INNGEST]: Upserting Subscription to convex...`
+          )
+          console.log(
+            `[INNGEST]: Checking for existing subscription first...`
+          )
+
+          const existingPolarId = await fetchQuery(
+             api.subscriptions.getByPolarId, {
+               polarSubscriptionId: payload.polarSubscriptionId
+             })
+             console.log(`[INNGEST: existing subscription polar ID by: ${
+              existingPolarId ? "found" : "not found"
+             }`)
+
+            const existingByUser = await fetchQuery(
+               api.subscriptions.getSubscriptionForUser,{
+                 userId: payload.userId
+               }
+            )
+
+            console.log(`[INNGEST]: existing subscription by USER Id ${
+               existingByUser ? "found" : "not found"
+            }`)
+
+            if(existingByUser && existingPolarId && existingByUser?._id !== existingPolarId?._id) {
+               console.warn(`❌[INNGEST]: Duplicate id detectes`)
+               console.warn(` - By Polar ID: ${existingPolarId}`)
+               console.warn(` - By User ID: ${existingByUser}`)
+            }
+
+        } catch (error) {
+          
+        }
+     })
   }
 )
