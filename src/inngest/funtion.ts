@@ -1,7 +1,7 @@
 import { fetchMutation, fetchQuery } from "convex/nextjs";
 import { inngest } from "./client";
 import { api } from "../../convex/_generated/api";
-import { extractOrder, extractSubscription, isPolarWebhookEvents, toMs } from "@/lib/polar";
+import { extractOrder, extractSubscription, grantKey, hasEntitled, isPolarWebhookEvents, toMs } from "@/lib/polar";
 import { PolarOrderProps, PolarSubscriptionProps, RecivedEvent } from "@/types/polar";
 import { Id } from "../../convex/_generated/dataModel";
 
@@ -171,9 +171,122 @@ export const paymentWithPolar = inngest.createFunction(
                console.warn(` - By User ID: ${existingByUser}`)
             }
 
+            const result = await fetchMutation(
+               api.subscriptions.upsertFromPolar,
+               payload
+            )
+
+            const allUserSubs = await fetchQuery(api.subscriptions.getAllforUser,{
+               userId: payload.userId
+            })
+
+            if(allUserSubs && allUserSubs.length > 1) {
+                allUserSubs.forEach((sub, index) => {
+                    console.warn(
+                      `${index + 1}, ID: ${sub._id}, POLAR_ID: ${sub.polarSubscriptionId}, Status: ${sub.status}`
+                    )
+                })
+            }
+            return result
+
         } catch (error) {
-          
+          console.error(`❌[INNGEST]: Failed to upsert subscription: ${error}`)
+          console.error(`[INNGEST]: Failed Payload ${JSON.stringify(payload, null,2)}`)
+          throw error
         }
      })
+
+     const looksCreate = /subscription\.create/i.test(type)
+     const looksReNew = /subscription\.renew|order\.created|invoice\.paid|order\.paid/i.test(type)
+     const entitled = hasEntitled(payload.status)
+     console.log('[INNGEST]: credit grant analysis:')
+     console.log('- Event type:', type)
+     console.log('- looks like create:', looksCreate)
+     console.log('- looks likfe renew:', looksReNew)
+     console.log('- user entitled:', entitled)
+     console.log('- Status:', payload.status)
+     const idk = grantKey(polarSubscriptionId, currentPeriodEnd,incoming.id)
+     console.log(`🔑[INNGEST]: Idempontency Key: ${idk}`)
+
+     if(entitled && (looksCreate || looksReNew || true)) {
+       const grant = await step.run('grant-credits', async() => {
+          try {
+            console.log('[INNGEST]: Grant credits to subscription')
+            const result = await fetchMutation(api.subscriptions.grantCreditsIfNeeded,{
+               subscriptionId,
+               idempotencyKey: idk,
+               amount: 10,
+               reason: looksCreate ? 'initial-grant' : 'periodic-grant'
+            })
+
+            console.log(`[INNGEST]: Create Grant successfully: ${result}`)
+            return result
+          } catch (error) {
+            console.error(`❌[INNGEST]: Grant not credited successfully: ${error}`)
+            throw error
+          }
+       })
+         console.log(`💌[INNEGST]: Grant result: ${grant}`)
+         if(grant.ok && !('skipped' in grant  && grant.skipped)) {
+           await step.sendEvent('credits-grant', {
+             name: 'billing/credits.granted',
+             id: `credits-granted:${polarSubscriptionId}:${currentPeriodEnd ?? 'first' }`,
+             data: {
+               userId,
+               amount: 'granted' in grant ? (grant.granted ?? 10) : 10,
+               balance: 'balance' in grant ? grant.balance : undefined,
+               periodEnd: currentPeriodEnd
+              },
+           })
+           console.log(`[INNGEST]: Credit Granted event send`)
+         } else {
+           console.log(`[INNGEST]: Credit granted was failed or skipped`)
+         }
+         
+     } else {
+       console.log(`[INNGEST]: Credit granting condition not met.....`)
+     }  
+
+     await step.sendEvent('sub-synced',{
+       name: 'billing/subscription.synced',
+       id: 'sub-synced',
+       data: {
+         userId,
+         polarSubscriptionId,
+         status: payload.status,
+         currentPeriodEnd
+       }
+     })
+
+      console.log(`[INNGEST]: subscription synced event send`)
+      if(currentPeriodEnd && currentPeriodEnd > Date.now()) {
+         const runAt  = new Date( 
+           Math.max(Date.now() + 5000, currentPeriodEnd - 3 * 24 * 60 * 60 * 1000)
+         )
+         await step.sleepUntil('wait-until-expiry', runAt)
+         const stillEntitled = await step.run('check-entitlement', async () => {
+             try {
+               console.log(`[INNGEST]: Checking entitlement status...`)
+               const result = await fetchQuery(api.subscriptions.hasEntitlement,{
+                 userId
+               })
+               console.log("[INNGEST]: Checking entitlement status", result)
+               return result
+             } catch (error) {
+               console.error('[INNGEST]: Failed to check entitlement')
+               throw error
+             }
+         })
+          if(stillEntitled) {
+             await step.sendEvent('pre-expiry',{
+               name: 'billing/subscription.pre_expiry',
+               data: {
+                  userId,
+                  runAt: runAt.toISOString(),
+                  periodEnd: currentPeriodEnd,
+               },
+             })
+          } 
+      }
   }
 )
