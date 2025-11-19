@@ -1,4 +1,5 @@
 import { PolarCustomerProps, PolarOrderProps, PolarPriceProps, PolarProductProps, PolarSubscriptionProps, PolarWebhookEventsProps } from "@/types/polar"
+import { sub } from "date-fns"
 
 
 export const isPolarWebhookEvents = (x: unknown): x is PolarWebhookEventsProps<unknown> => {
@@ -71,3 +72,16 @@ export const toMs = (
      const t = Date.parse(x)
      return Number.isNaN(t) ? undefined : t
 }
+
+export const hasEntitled = (status: string): boolean => 
+  /^(active|trialing)$/i.test(status)
+
+
+export const grantKey = (
+    subId: string,
+    periodEndMs?: number,
+    eventId?: string | number
+): string => 
+    periodEndMs != null
+       ? `${subId}:${periodEndMs}`
+       : `${subId}:first` 
