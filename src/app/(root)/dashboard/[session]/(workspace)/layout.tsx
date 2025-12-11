@@ -8,10 +8,10 @@ type Props = {
      children: React.ReactNode
 }
 const Layout = async ({children}: Props) => {
-  /* const { entitlement,profileName } = await SubscriptionEntitlementQuery() */
-   /* if(!entitlement._valueJSON){
-     redirect(`/dashboard/${combineSlug(profileName!)}`)
-  }  */
+  const {profileName, entitlement} = await SubscriptionEntitlementQuery()
+  if(!entitlement._valueJSON) {
+     redirect(`/billing/${combineSlug(profileName!)}`)
+  }
   return (
     <div>
     <Navbar/>
