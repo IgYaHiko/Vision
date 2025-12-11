@@ -1,12 +1,20 @@
+'use client'
 import { Button } from '@/components/ui/button'
+import { useSubscribePlan } from '@/hooks/use-billing';
 import React from 'react'
 
 interface Props {
-
+   onClick?: () => void;
+   disable?: () => void
 }
-const SubscribeButton = () => {
+const SubscribeButton = ({onClick,disable}: Props) => {
+  const {isFetching,onSubscribe} = useSubscribePlan()
   return (
-    <Button variant={'ghost'} className='font-mono font-black'>
+    <Button 
+    type='button'
+    onClick={onSubscribe}
+    disabled={isFetching}
+     variant={'ghost'} className='font-mono font-black'>
         Subscribe
     </Button>
   )
