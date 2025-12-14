@@ -1,11 +1,11 @@
 'use client'
 import { useQuery } from 'convex/react';
 import Link from 'next/link';
-import { usePathname, useSearchParams, useRouter } from 'next/navigation';
+import { usePathname, useSearchParams, useRouter, redirect } from 'next/navigation';
 import React from 'react';
 import { api } from '../../../convex/_generated/api';
 import { Id } from '../../../convex/_generated/dataModel';
-import { CircleQuestionMark, Hash, LayoutTemplate, User } from 'lucide-react';
+import { CircleQuestionMark, Crown, Hash, LayoutTemplate, User } from 'lucide-react';
 import {
   Tabs,
   TabsList,
@@ -16,10 +16,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { UseAuth } from '@/hooks/use-auth';
 import { useAppSelector } from '@/redux/store';
 import CreateProjectButton from '../button/create/CreateProjectButton';
-import { cn } from '@/lib/utils';
+import { cn, combineSlug } from '@/lib/utils';
 import AutosaveButton from '../button/auto-save/auto-save-button';
+import { SubscriptionEntitlementQuery } from '@/convex/query.config';
 
-const Navbar = () => {
+const Navbar =  () => {
+  
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -31,6 +33,11 @@ const Navbar = () => {
     api.projects.getProjects,
     projectId ? {projectId: projectId as Id<'projects'>} : "skip"
 
+  )
+
+  const creditBalance = useQuery(
+    api.subscriptions.getCreditBalance,
+   {userId: me.id as Id<'users'>}
   )
   const currentTab = pathname.includes('canvas')
     ? 'canvas'
@@ -50,9 +57,14 @@ const Navbar = () => {
     router.push(`/dashboard/${session}/style-guide${query}`);
   }
 };
+const goToBilling = async () => {
+  router.push(`/billing/${combineSlug(me.name)}`)
+}
+
 
   const hasCanvas = pathname.includes('canvas')
   const hasCanvasStyleGuide = pathname.includes('style-guide')
+  
   
   return (
     <div className=" grid grid-cols-2 lg:grid-cols-3 p-5  ">
@@ -103,7 +115,7 @@ const Navbar = () => {
       {/* credits */}
     <div className="flex items-center justify-end gap-3">
   {/* credits text */}
-  <span className="font-mono text-sm text-muted-foreground">Credits</span>
+  <span className="font-mono text-sm text-muted-foreground">{creditBalance}</span>
 
   {/* help / info button */}
   <Button
@@ -113,6 +125,15 @@ const Navbar = () => {
   >
     <CircleQuestionMark className="h-4 w-4" />
   </Button>
+   {/* billing */}
+   <Button
+   onClick={goToBilling}
+   size="icon"
+   variant='secondary'
+    className="h-8 w-8 rounded-full flex items-center justify-center"
+  >
+  <Crown className='h-4 w-4' />
+  </Button>
 
   {/* avatar */}
   <Avatar className="h-8 w-8">
@@ -121,6 +142,10 @@ const Navbar = () => {
       <User className="h-4 w-4" />
     </AvatarFallback>
   </Avatar>
+
+ 
+ 
+
   {
      hasCanvas && (
       <AutosaveButton/>
