@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { useMoodBoard } from "@/hooks/use-moodboard";
 import { Button } from "../../ui/button";
 import ImageBoard from "./image-board";
+import StyleGenerateButton from "@/components/button/generateStyle/style-generate-button";
+import { useSearchParams } from "next/navigation";
 
 type MoodboardProps = {
   moodboardGuide: MoodboardImageProps[];
@@ -63,7 +65,8 @@ const MoodBoardContent = ({ moodboardGuide }: MoodboardProps) => {
     window.addEventListener("resize", checkScreen);
     return () => window.removeEventListener("resize", checkScreen);
   }, []);
-
+  const searchParams = useSearchParams()
+  const projectId =  searchParams.get('projectId')
   return (
     <div className="flex flex-col gap-5">
       <div
@@ -196,12 +199,11 @@ const MoodBoardContent = ({ moodboardGuide }: MoodboardProps) => {
           create a style guide for you.
         </span>
 
-        <Button
-          className="font-mono font-bold mt-3 md:mt-0 capitalize rounded-3xl"
-          variant={"default"}
-        >
-          <SparklesIcon className="fill-amber-300" /> Generate With AI
-        </Button>
+       <StyleGenerateButton
+        projectId={projectId ?? ''}
+        image={images}
+        fileInputRef={fileInputRef}
+       />
       </div>
     </div>
   );

@@ -1,3 +1,6 @@
+import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { MoodboardImageProps } from "../moodboard";
+
 export interface ColorSwatchs {
      name: string;
      hexColor: string;
@@ -11,6 +14,16 @@ export interface ColorSection {
     | 'Utility & Form Color'
     | 'Status & Feedback Color'
   swatchs: ColorSwatchs[]
+}
+
+export interface GenerateStyleGuideRequest {
+      projectId: string
+}
+
+export interface GenerateStyleGuideResponse {
+      success: boolean
+      message: string
+      styleGuide: StyleGuide
 }
 
 
@@ -41,3 +54,28 @@ export interface StyleGuide {
     ];
     typographySection: [TypographySection, TypographySection, TypographySection]
 }
+
+export const StyleApi = createApi({
+     reducerPath: "styleApi",
+     baseQuery: fetchBaseQuery({baseUrl: "/api/generate"}),
+     tagTypes: ['StyleGuide'],
+     endpoints: (builder) => ({
+           generateStyleGuide: builder.mutation<
+            GenerateStyleGuideResponse,
+            GenerateStyleGuideRequest>({
+                 query: ({projectId}) => ({
+                     url: '/style',
+                     method: "POST",
+                     headers: {
+                          'Content-type' : 'application/json',
+                     },
+                     body: { projectId },
+
+                }),
+                invalidatesTags:  ['StyleGuide'],
+            })
+           
+     })
+})
+
+export const { useGenerateStyleGuideMutation } = StyleApi
