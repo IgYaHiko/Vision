@@ -66,7 +66,7 @@ const MoodBoardContent = ({ moodboardGuide }: MoodboardProps) => {
     return () => window.removeEventListener("resize", checkScreen);
   }, []);
   const searchParams = useSearchParams()
-  const projectId =  searchParams.get('projectId')
+  const projectId =  searchParams.get('project')
   return (
     <div className="flex flex-col gap-5">
       <div

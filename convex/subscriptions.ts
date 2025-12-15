@@ -191,7 +191,7 @@ export const getAllforUser = query({
     }
 })
 
-export const grantCreditsIfNeeded = mutation({
+/* export const grantCreditsIfNeeded = mutation({
     args: {
       subscriptionId: v.id('subscriptions'),
       idempotencyKey: v.string(),
@@ -238,19 +238,95 @@ export const grantCreditsIfNeeded = mutation({
           })
           return {ok: true, granted: grant, balance: next}
     }
-})
+}) */
+
+
+    export const grantCreditsIfNeeded = mutation({
+  args: {
+    subscriptionId: v.id("subscriptions"),
+    idempotencyKey: v.string(),
+    amount: v.optional(v.number()),
+    reason: v.optional(v.string()),
+
+    // ✅ CORRECT PLACE
+    forceGrant: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const isForced = args.forceGrant === true;
+
+    const duplicate = await ctx.db
+      .query("credit_ledger")
+      .withIndex("by_idempotencyKey", q =>
+        q.eq("idempotencyKey", args.idempotencyKey)
+      )
+      .first();
+
+    if (duplicate) {
+      return { ok: true, skipped: true, reason: "duplicate_ledger" };
+    }
+
+    const sub = await ctx.db.get(args.subscriptionId);
+    if (!sub) return { ok: false, error: "subscription-not-found" };
+
+    // 🔥 BYPASS POLAR ONLY IF forceGrant = true
+    if (!isForced) {
+      if (sub.lastGrantCursor === args.idempotencyKey) {
+        return { ok: true, skipped: true, reason: "cursor-match" };
+      }
+
+      if (!ENTITLED.has(sub.status)) {
+        return { ok: true, skipped: true, reason: "not-entitled" };
+      }
+    }
+
+    const grant = isForced
+      ? 10
+      : args.amount ?? sub.creditsGrantPerPeriod ?? DEFAULT_GRANT;
+
+    const next = Math.min(
+      sub.creditsBalance + grant,
+      sub.creditsRollOverLimit ?? DEFAULT_ROLLOVER_LIMIT
+    );
+
+    await ctx.db.patch(args.subscriptionId, {
+      creditsBalance: next,
+      lastGrantCursor: args.idempotencyKey,
+    });
+
+    await ctx.db.insert("credit_ledger", {
+      userId: sub.userId,
+      subscriptionId: args.subscriptionId,
+      amount: grant,
+      type: "grant",
+      reason: args.reason ?? (isForced ? "force-grant" : "periodic-grant"),
+      idempotencyKey: args.idempotencyKey,
+      meta: {
+        forced: isForced,
+        prev: sub.creditsBalance,
+        next,
+      },
+    });
+
+    return { ok: true, granted: grant, balance: next };
+  },
+});
 
 export const getCreditBalance = query({
-    args: {
-       userId: v.id('users')
-    },
-    handler: async(ctx, {userId}) => {
-       const sub = await ctx.db
-       .query('subscriptions')
-       .withIndex("by_userId",(q) => q.eq('userId',userId))
-       .first()
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, { userId }) => {
+    const sub = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .filter((q) =>
+        q.or(
+          q.eq(q.field("status"), "active"),
+          q.eq(q.field("status"), "trialing")
+        )
+      )
+      .first()
 
-       return sub?.creditsBalance ?? 0
-
-    }
+    return sub?.creditsBalance ?? 10
+  },
 })
