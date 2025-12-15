@@ -86,3 +86,21 @@ export const ProjectQuery = async (projectId: string) => {
        project
    }
 }
+
+export const CreditBalanceQurey = async () => {
+     const rawProfile = await ProfileQuery()
+     const profileInfo = normalizeProfile(
+       rawProfile._valueJSON as unknown as ConvexUserRaw | null
+     )
+     if(!profileInfo?.id) {
+       return {ok: false, balance: 0, profile: null}
+     }
+
+     const balance = await preloadQuery(
+      api.subscriptions.getCreditBalance,
+      {userId: profileInfo.id as Id<'users'>},
+      {token: await convexAuthNextjsToken()}
+     )
+
+     return {ok: true, balance: balance._valueJSON, profileInfo}
+}
