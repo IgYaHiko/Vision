@@ -10,6 +10,7 @@ export const useStyleGuide = (
     image: MoodboardImageProps[],
     fileInputRef: RefObject<HTMLElement | null>
 ) => {
+     console.log("ProjectID:", projectId)
      const [generateStyleGuide, {isLoading: isGenerating}] = useGenerateStyleGuideMutation()
      const router = useRouter()
      const handleUploadClick = () => {

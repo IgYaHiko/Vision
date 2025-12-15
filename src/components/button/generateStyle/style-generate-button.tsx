@@ -12,8 +12,11 @@ const StyleGenerateButton = ({fileInputRef,image,projectId}: Props) => {
 
   return (
      image.length > 0 && (
-         <div className='flex justify-end'>
-            <Button className='font-mono font-bold text-xs cursor-pointer' >
+         <div className='flex justify-end mt-5 md:mt-0'>
+            <Button
+             onClick={handleGenerateStyleGuide}
+             disabled={isGenerating}
+            className='font-mono font-bold text-xs cursor-pointer' >
                {
                 isGenerating ? 
                 (

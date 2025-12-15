@@ -1,5 +1,4 @@
 import { PolarCustomerProps, PolarOrderProps, PolarPriceProps, PolarProductProps, PolarSubscriptionProps, PolarWebhookEventsProps } from "@/types/polar"
-import { sub } from "date-fns"
 
 
 export const isPolarWebhookEvents = (x: unknown): x is PolarWebhookEventsProps<unknown> => {

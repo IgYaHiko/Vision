@@ -120,13 +120,13 @@ export const paymentWithPolar = inngest.createFunction(
           polarCustomerId: sub?.customer_id ?? order?.customer_id ?? '', polarSubscriptionId,
           productId: sub?.product_id ?? sub?.product?.id ?? undefined,
           priceId: sub?.prices?.[0]?.id ?? undefined,
-          plancode: sub?.plan_code ?? sub?.product?.name ?? undefined,
+          planCode: sub?.plan_code ?? sub?.product?.name ?? undefined,
           status: sub?.status ?? 'updated', currentPeriodEnd,
-          trialEndsAt: toMs(sub?.triel_ends_at),
+          trialsEndsAt: toMs(sub?.triel_ends_at),
           cancelAt: toMs(sub?.cancel_at),
           canceledAt: toMs(sub?.canceled_at),
-          seat: sub?.seat ?? undefined,
-          metadata: data,
+          seats: sub?.seat ?? undefined,
+          metaData: data,
           creditsGrantPerPeriod: 10,
           creditsRollOverLimit: 100,
 
@@ -214,6 +214,7 @@ export const paymentWithPolar = inngest.createFunction(
             console.log('[INNGEST]: Grant credits to subscription')
             const result = await fetchMutation(api.subscriptions.grantCreditsIfNeeded,{
                subscriptionId,
+               forceGrant: true,
                idempotencyKey: idk,
                amount: 10,
                reason: looksCreate ? 'initial-grant' : 'periodic-grant'
