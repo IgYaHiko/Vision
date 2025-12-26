@@ -1,84 +1,63 @@
-import { cn } from '@/lib/utils';
-import React from 'react';
+// components/style-guide/colors/theme-content.tsx
+'use client'
 
-type ColorSwatch = {
-  name: string;
-  hexColor: string;
-  description?: string;
-};
+import React from 'react'
+import { ColorSection } from '@/redux/api/style-guide'
+import { ColorSwatchItem } from './colorswatch'
 
-type ColorThemeProps = {
-  title: string;
-  swatches: ColorSwatch[];
-  className?: string;
-};
+interface ThemeContentProps {
+  colorGuide: ColorSection[]
+}
 
-type ThemeContentProps = {
-  colorGuide: ColorThemeProps[] | undefined;
-};
-
-export const ThemeContent = ({ colorGuide }: ThemeContentProps) => {
+const ThemeContent = ({ colorGuide }: ThemeContentProps) => {
+  // Debug: Log what we're receiving
+  console.log('🎨 ThemeContent received colorGuide:', colorGuide)
+  console.log('🎨 Color sections count:', colorGuide?.length || 0)
+  
   if (!colorGuide || colorGuide.length === 0) {
     return (
-      <div className="text-sm text-muted-foreground font-mono">
-        No color guide available.
+      <div className="text-center py-10">
+        <p className="text-muted-foreground">No color data available</p>
       </div>
-    );
+    )
   }
 
   return (
-    <div className="flex flex-col gap-10">
-      {colorGuide.map((section, i) => (
-        <ColorTheme
-          key={i}
-          title={section.title}
-          swatches={section.swatches}
-        />
-    
-      ))}
-     
-    </div>
-  );
-};
-
-export const ColorTheme = ({
-  swatches,
-  title,
-  className,
-}: ColorThemeProps) => {
-  return (
-    <div className={cn('flex flex-col gap-5', className)}>
-      <h3 className="text-lg font-mono">{title}</h3>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
-        {swatches.map((sw) => (
-          <ColorSwatchItem key={sw.name} name={sw.name} value={sw.hexColor} />
-        ))}
+    <div className="space-y-8">
+      {colorGuide.map((section, index) => {
+        // Safely access swatchs (note the spelling: swatchs not swatches)
+        const swatchs = section.swatchs || []
+        console.log(`🎨 Section ${index}: "${section.title}" has ${swatchs.length} swatchs`)
         
-      </div>
+        return (
+          <div key={index} className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold capitalize">{section.title}</h3>
+              <span className="text-sm text-muted-foreground">
+                {swatchs.length} color{swatchs.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            
+            {swatchs.length === 0 ? (
+              <div className="text-center py-4 text-muted-foreground">
+                No colors in this section
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
+                {swatchs.map((sw) => (
+                  <ColorSwatchItem 
+                    key={sw.name} 
+                    name={sw.name} 
+                    value={sw.hexColor} 
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
-  );
-};
+  )
+}
 
-type ColorSwatchProps = {
-  name: string;
-  value: string;
-  className?: string;
-};
-
-const ColorSwatchItem = ({ name, value, className }: ColorSwatchProps) => {
-  return (
-    <div className={cn('flex items-center gap-3', className)}>
-      <div
-        style={{ backgroundColor: value }}
-        className="w-12 h-12 rounded-lg border border-border/20 flex-shrink-0"
-      />
-      <div>
-        <h4 className="text-sm font-mono">{name}</h4>
-        <p className="font-mono text-xs uppercase text-muted-foreground">
-          {value}
-        </p>
-      </div>
-    </div>
-  );
-};
+export default ThemeContent

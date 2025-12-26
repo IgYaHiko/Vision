@@ -47,15 +47,15 @@ export const ProjectsQuery = async () => {
 }
 
 
+// convex/query.config.ts - Check what StyleGuideQuery does
 export const StyleGuideQuery = async (projectId: string) => {
-    const styleGuide = await preloadQuery(
-      api.projects.getProjectStyleGuide,
-      {projectId: projectId as Id<'projects'>},
-      {token: await convexAuthNextjsToken()}
-    )
+  const styleGuide = await preloadQuery(
+    api.projects.getProjectStyleGuide,
+    { projectId: projectId as Id<'projects'> },
+    { token: await convexAuthNextjsToken() }
+  )
 
-    return {styleGuide}
-
+  return { styleGuide } // This returns { styleGuide: parsedObject }
 }
 
 export const MoodBoardQuery = async (projectId: string) => {
