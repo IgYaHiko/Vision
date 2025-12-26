@@ -106,36 +106,73 @@ export const getUserProject = query({
     
 })
 
-export const getProjectStyleGuide = query({
-     args: {
-        projectId: v.id('projects'),
-    },
-    handler: async (ctx, {projectId}) => {
-         const userId = await getAuthUserId(ctx);
-         if(!userId)  throw new Error("Not Authenticated");
+// In your convex/projects.ts, update the query:
+/* export const getProjectStyleGuide = query({
+  args: {
+    projectId: v.id('projects'),
+  },
+  handler: async (ctx, { projectId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not Authenticated");
 
-         const projects = await ctx.db.get(projectId)
-         if(!projects) throw new Error('No projects found')
+    const project = await ctx.db.get(projectId);
+    if (!project) throw new Error('No project found');
 
-        if(projects?.userId !== userId && !projects.isPublic) {
-             throw new Error("Access Denial")
-        }
-
-        //return parse data
-        return projects.styleGuide ? JSON.parse(projects.styleGuide) : null
+    if (project.userId !== userId && !project.isPublic) {
+      throw new Error("Access Denied");
     }
-})
 
-export const updateProjectSketches = mutation({
+    // Return parsed data or null
+    if (!project.styleGuide) {
+      return null;
+    }
+    
+    try {
+      return JSON.parse(project.styleGuide);
+    } catch (error) {
+      console.error("Failed to parse style guide:", error);
+      return null;
+    }
+  }
+}); */
+// convex/projects.ts - UPDATE THIS QUERY
+export const getProjectStyleGuide = query({
+  args: {
+    projectId: v.id('projects'),
+  },
+  handler: async (ctx, { projectId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not Authenticated");
+
+    const project = await ctx.db.get(projectId);
+    if (!project) throw new Error('No project found');
+
+    if (project.userId !== userId && !project.isPublic) {
+      throw new Error("Access Denied");
+    }
+
+    // FIX: Check if styleGuide exists and is a valid string
+    if (!project.styleGuide || typeof project.styleGuide !== 'string') {
+      return null;
+    }
+    
+    try {
+      // Parse the JSON string back to object
+      return JSON.parse(project.styleGuide);
+    } catch (error) {
+      console.error("Failed to parse style guide:", error);
+      return null;
+    }
+  }
+});
+/* export const updateProjectSketches = mutation({
      args: {
        projectId: v.id('projects'),
        sketchesData: v.any(),
        viewPortData: v.optional(v.any())
      },
      handler: async(ctx, {projectId,sketchesData,viewPortData}) => {
-         /* const userId = await getAuthUserId(ctx);
-         if(!userId) throw new Error('Not authenticated') */
-
+        
          const project = await ctx.db.get(projectId)
          if(!project) throw new Error("Project Not found")
 
@@ -153,4 +190,84 @@ export const updateProjectSketches = mutation({
         
 
      }
-})
+}) */
+
+// convex/projects.ts - UPDATE this mutation
+export const updateProjectSketches = mutation({
+  args: {
+    projectId: v.id('projects'),
+    sketchesData: v.any(),
+    viewPortData: v.optional(v.any()),
+    styleGuide: v.optional(v.string()), // ADD THIS
+  },
+  handler: async(ctx, { projectId, sketchesData, viewPortData, styleGuide }) => {
+    const project = await ctx.db.get(projectId);
+    if (!project) throw new Error("Project Not found");
+
+    const updateData: any = {
+      sketchesData, 
+      lastModified: Date.now()
+    };
+    
+    if (viewPortData) {
+      updateData.viewPortData = viewPortData;
+    }
+    
+    // ADD THIS: Save style guide if provided
+    if (styleGuide !== undefined) {
+      updateData.styleGuide = styleGuide;
+      console.log("✅ Style guide saved to project");
+    }
+    
+    await ctx.db.patch(projectId, updateData);
+    console.log("✅[CONVEX]: Project update successful");
+    return { success: true };
+  }
+});
+
+export const updateProjectStyleGuide = mutation({
+  args: {
+    projectId: v.id('projects'),
+    styleGuide: v.string(), // IMPORTANT: Must be string (JSON stringified)
+  },
+  handler: async (ctx, { projectId, styleGuide }) => {
+    // Just save it directly
+    await ctx.db.patch(projectId, {
+      styleGuide: styleGuide,
+      lastModified: Date.now(),
+    });
+    
+    console.log("✅ Style guide saved to project:", projectId);
+    return { success: true };
+  },
+});
+
+// In your existing convex/projects.ts, update the mutation:
+export const updateProject = mutation({
+  args: {
+    projectId: v.id('projects'),
+    sketchesData: v.optional(v.any()),
+    viewPortData: v.optional(v.any()),
+    styleGuide: v.optional(v.any()), // Add this
+  },
+  handler: async(ctx, { projectId, sketchesData, viewPortData, styleGuide }) => {
+    const updateData: any = {
+      lastModified: Date.now()
+    };
+    
+    if (sketchesData !== undefined) {
+      updateData.sketchesData = sketchesData;
+    }
+    
+    if (viewPortData !== undefined) {
+      updateData.viewPortData = viewPortData;
+    }
+    
+    if (styleGuide !== undefined) {
+      updateData.styleGuide = JSON.stringify(styleGuide); // Convert to string
+    }
+    
+    await ctx.db.patch(projectId, updateData);
+    return { success: true };
+  }
+});

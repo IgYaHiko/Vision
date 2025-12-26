@@ -1,15 +1,19 @@
+// app/api/generate/style/route.ts - FIXED VERSION
 import { CreditBalanceQurey, MoodBoardQuery } from "@/convex/query.config";
 import { prompts } from "@/prompts";
 import { MoodboardImageProps } from "@/redux/api/moodboard";
 import { NextRequest, NextResponse } from "next/server";
 import { generateObject } from "ai";
-import { openai } from "@ai-sdk/openai";
+import { google } from "@ai-sdk/google";
 import z from "zod";
+import { adaptAIToRedux } from "@/utils/style-adapters";
+import { Id } from "../../../../../convex/_generated/dataModel";
+import { api } from "../../../../../convex/_generated/api";
 
 // ---------------- Zod Schemas ----------------
 const ColorSwatches = z.object({
   name: z.string(),
-  haxcode: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Must be a valid hexcode"),
+  haxColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Must be a valid hexcode"),
   description: z.string().optional(),
 });
 
@@ -22,7 +26,6 @@ const TypographyStyleSchema = z.object({
   description: z.string().optional(),
 });
 
-// More flexible color schemas
 const PrimaryColorSchema = z.object({
   title: z.literal("Primary Colors"),
   swatches: z.array(ColorSwatches).min(1, "Need at least 1 color")
@@ -66,76 +69,7 @@ const StyleGuideSchema = z.object({
   typographySection: z.array(TypographySectionSchema).min(1, "Need at least 1 typography section")
 });
 
-// ---------------- Color Swatch Validation Function ----------------
-function validateColorSwatches(styleGuide: any) {
-  console.log('🔍 Starting color swatch validation...');
-  const issues: string[] = [];
-  
-  // Check if colorSections exist
-  if (!styleGuide.colorSections) {
-    issues.push('No colorSections found in style guide');
-    console.error('❌ No colorSections found');
-    return { isValid: false, totalColors: 0, issues };
-  }
-  
-  const sections = ['primary', 'secondary', 'uiComponents', 'utility', 'status'];
-  let totalColors = 0;
-  
-  sections.forEach(section => {
-    const sectionData = (styleGuide.colorSections as any)[section];
-    
-    if (!sectionData) {
-      issues.push(`${section}: Missing section data`);
-      console.error(`❌ ${section}: Missing section data`);
-      return;
-    }
-    
-    const swatches = sectionData.swatches;
-    
-    if (!swatches || !Array.isArray(swatches)) {
-      issues.push(`${section}: No swatches array found`);
-      console.error(`❌ ${section}: No swatches array found`);
-    } else if (swatches.length === 0) {
-      issues.push(`${section}: Empty swatches array`);
-      console.warn(`⚠️ ${section}: Empty swatches array`);
-    } else {
-      totalColors += swatches.length;
-      console.log(`✅ ${section}: ${swatches.length} color(s) found`);
-      
-      // Check each color's format
-      swatches.forEach((swatch: any, index: number) => {
-        console.log(`   ${index + 1}. ${swatch.name}: ${swatch.haxcode}`);
-        
-        if (!swatch.haxcode) {
-          issues.push(`${section}[${index}]: Missing hex code`);
-          console.error(`   ❌ Missing hex code`);
-        } else if (!/^#[0-9A-Fa-f]{6}$/.test(swatch.haxcode)) {
-          issues.push(`${section}[${index}]: Invalid hex code "${swatch.haxcode}"`);
-          console.error(`   ❌ Invalid hex code: ${swatch.haxcode}`);
-        }
-        
-        if (!swatch.name) {
-          issues.push(`${section}[${index}]: Missing color name`);
-          console.error(`   ❌ Missing color name`);
-        }
-      });
-    }
-  });
-  
-  const isValid = issues.length === 0;
-  console.log(`📊 Total colors validated: ${totalColors}`);
-  console.log(`📋 Validation issues: ${issues.length}`);
-  
-  return {
-    isValid,
-    totalColors,
-    issues
-  };
-}
-
-// ---------------- Route Handler ----------------
 export async function POST(req: NextRequest) {
-  // Add request ID for tracking
   const requestId = Date.now() + Math.random().toString(36).substr(2, 9);
   console.log(`\n=== [${requestId}] START Style Guide Generation ===`);
   
@@ -146,39 +80,23 @@ export async function POST(req: NextRequest) {
     console.log(`[${requestId}] Project ID:`, projectId);
 
     if (!projectId) {
-      console.error(`[${requestId}] ❌ No project ID provided`);
-      return NextResponse.json(
-        { error: "Project Id is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Project Id is required" }, { status: 400 });
     }
 
-    // ---------------- Credit Check ----------------
+    // 1. Check credits
     console.log(`[${requestId}] Checking credits...`);
     const { ok, balance } = await CreditBalanceQurey();
     if (!ok) {
-      console.error(`[${requestId}] ❌ Failed to get credit balance`);
-      return NextResponse.json(
-        { error: "Failed to get credit balance" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Failed to get credit balance" }, { status: 500 });
     }
-
-    console.log(`[${requestId}] Credits available:`, balance);
-
     if (balance === 0) {
-      console.error(`[${requestId}] ❌ Insufficient credits`);
-      return NextResponse.json(
-        { error: "Insufficient credits" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Insufficient credits" }, { status: 400 });
     }
 
-    // ---------------- Moodboard Fetch ----------------
+    // 2. Get moodboard images
     console.log(`[${requestId}] Fetching moodboard images...`);
     const moodboardImages = await MoodBoardQuery(projectId);
     if (!moodboardImages || moodboardImages.imges._valueJSON.length === 0) {
-      console.error(`[${requestId}] ❌ No moodboard images found`);
       return NextResponse.json(
         { error: "No moodboard images found. Please upload images first." },
         { status: 400 }
@@ -186,37 +104,54 @@ export async function POST(req: NextRequest) {
     }
 
     const images = moodboardImages.imges._valueJSON as unknown as MoodboardImageProps[];
-    const imageURLs = images
-      .map((img) => img.url)
-      .filter((url): url is string => Boolean(url));
-
-    console.log(`[${requestId}] Total images from moodboard:`, images.length);
-    console.log(`[${requestId}] Valid image URLs:`, imageURLs.length);
+    const imageURLs = images.map((img) => img.url).filter((url): url is string => Boolean(url));
 
     if (imageURLs.length === 0) {
-      console.error(`[${requestId}] ❌ No valid image URLs found`);
-      return NextResponse.json(
-        { error: "No valid image URLs found" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "No valid image URLs found" }, { status: 400 });
     }
 
-    // Log first few image URLs (truncated for readability)
-    imageURLs.slice(0, 3).forEach((url, i) => {
-      console.log(`[${requestId}] Image ${i + 1}:`, url.substring(0, 50) + '...');
-    });
-
-    // Use your system prompt from prompts file
-    const systemPrompt = prompts.styleGuide || `You are a professional UI/UX designer. Analyze moodboard images and generate a comprehensive design system.`;
+    // 3. DEBUG: Check what prompts.styleGuide actually is
+    console.log(`[${requestId}] prompts.styleGuide type:`, typeof prompts.styleGuide);
+    console.log(`[${requestId}] prompts.styleGuide keys:`, prompts.styleGuide ? Object.keys(prompts.styleGuide) : 'null');
     
-    // Create the full prompt by combining system and user instructions
-    const fullPrompt = `${systemPrompt}
+    // EXTRACT THE SYSTEM PROMPT STRING
+    let systemPromptText: string;
+    
+    if (typeof prompts.styleGuide === 'string') {
+      systemPromptText = prompts.styleGuide;
+    } else if (prompts.styleGuide && typeof prompts.styleGuide === 'object') {
+      // The error shows it's an object with a system property
+      const promptObj = prompts.styleGuide as any;
+      console.log(`[${requestId}] Prompt object structure:`, JSON.stringify(promptObj, null, 2).substring(0, 500));
+      
+      // Extract the system prompt text
+      if (promptObj.system && typeof promptObj.system === 'string') {
+        systemPromptText = promptObj.system;
+        console.log(`[${requestId}] ✅ Using system property from object`);
+      } else if (promptObj.text && typeof promptObj.text === 'string') {
+        systemPromptText = promptObj.text;
+        console.log(`[${requestId}] Using text property from object`);
+      } else {
+        // If we can't extract, use a default
+        systemPromptText = "You are a professional UI/UX designer. Analyze moodboard images and generate a comprehensive design system.";
+        console.log(`[${requestId}] ⚠️ Could not extract text, using default`);
+      }
+    } else {
+      systemPromptText = "You are a professional UI/UX designer. Analyze moodboard images and generate a comprehensive design system.";
+    }
+
+    console.log(`[${requestId}] Final system prompt length:`, systemPromptText.length);
+    console.log(`[${requestId}] First 200 chars:`, systemPromptText.substring(0, 200));
+
+    // 4. Create the FULL prompt with requirements
+    const fullPrompt = `${systemPromptText}
 
 Analyze these ${imageURLs.length} moodboard image(s) and generate a design system.
 
-REQUIREMENTS:
-1. Extract colors that work harmoniously together
-2. Create typography that matches the aesthetic
+IMPORTANT FORMAT REQUIREMENTS:
+1. Use "haxColor" property name for all hex color codes (NOT "hex", "hexcode", etc.)
+2. All hex codes must be valid 6-character format: #RRGGBB (e.g., #1A2B3C)
+3. Return ONLY valid JSON that matches the schema
 
 COLOR SECTIONS (each must have at least 1 color):
 - Primary Colors: Main brand colors (1-4 colors)
@@ -227,219 +162,156 @@ COLOR SECTIONS (each must have at least 1 color):
 
 TYPOGRAPHY: At least 1 section with 1+ font styles
 
-FORMAT REQUIREMENTS:
-- Hex codes must be valid 6-character format: #RRGGBB
-- Font weights should be numeric: 400, 700, etc.
-- Return only the JSON object matching the schema.`;
+Return ONLY the JSON object matching the schema, no additional text.`;
 
-    console.log(`[${requestId}] Full prompt length:`, fullPrompt.length);
-    console.log(`[${requestId}] Starting AI generation...`);
+    // 5. Generate AI style guide
+    console.log(`[${requestId}] Generating AI style guide...`);
+    
+    const result = await generateObject({
+      model: google("gemini-2.5-flash"),
+      schema: StyleGuideSchema,
+      system: systemPromptText, // Use system parameter for the base prompt
+      messages: [
+        {
+          role: "user" as const,
+          content: [
+            { 
+              type: "text" as const, 
+              text: `Analyze these ${imageURLs.length} moodboard image(s) and generate a design system.
 
-    try {
-      // ---------------- Generate Style Guide ----------------
-      const startTime = Date.now();
-      
-      console.log(`[${requestId}] 🤖 Calling OpenAI API with ${imageURLs.length} images...`);
-      
-      // FIX: Use only messages, not prompt and messages together
-      const result = await generateObject({
-        model: openai("gpt-4o"),
-        schema: StyleGuideSchema,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: fullPrompt },
-              ...imageURLs.map((url) => ({ 
-                type: "image" as const, 
-                image: url 
-              }))
-            ]
-          }
-        ],
-        temperature: 0.2,
-        maxRetries: 2,
-      });
+IMPORTANT FORMAT REQUIREMENTS:
+1. Use "haxColor" property name for all hex color codes
+2. All hex codes must be valid 6-character format: #RRGGBB
+3. Return ONLY valid JSON that matches the schema
 
-      const generationTime = Date.now() - startTime;
-      console.log(`[${requestId}] ✅ AI generation completed in ${generationTime}ms`);
-      
-     /*  // Log AI response details
-      console.log(`[${requestId}] AI Finish Reason:`, result.finishReason);
-      if (result.usage) {
-        console.log(`[${requestId}] AI Usage:`, {
-          promptTokens: result.usage.promptTokens,
-          completionTokens: result.usage.completionTokens,
-          totalTokens: result.usage.totalTokens
-        });
-      } */
-      
-      console.log(`[${requestId}] Raw AI object has theme:`, !!result.object.theme);
-      console.log(`[${requestId}] Raw AI object has colorSections:`, !!result.object.colorSections);
-      console.log(`[${requestId}] Raw AI object has typographySection:`, !!result.object.typographySection);
-      
-      // Log the theme and description
-      console.log(`[${requestId}] Generated theme:`, result.object.theme);
-      console.log(`[${requestId}] Description:`, result.object.description?.substring(0, 100) + '...');
+COLOR SECTIONS (each must have at least 1 color):
+- Primary Colors: Main brand colors
+- Secondary & Accent Colors: Supporting colors  
+- UI Component Colors: For buttons, cards, etc.
+- Utility & Form Colors: Neutral colors
+- Status & Feedback Colors: Success, warning, error
 
-      // ---------------- Validate and Clean Response ----------------
-      console.log(`[${requestId}] Validating schema...`);
-      const validatedData = StyleGuideSchema.parse(result.object);
-      console.log(`[${requestId}] ✅ Schema validation passed`);
-      
-      // Run detailed color validation
-      console.log(`\n[${requestId}] 🔍 Running detailed color validation...`);
-      const colorValidation = validateColorSwatches(validatedData);
-      
-      // Clean up any invalid hex codes
-      console.log(`[${requestId}] Cleaning hex codes...`);
-      const cleanData = {
-        ...validatedData,
-        colorSections: {
-          primary: {
-            ...validatedData.colorSections.primary,
-            swatches: validatedData.colorSections.primary.swatches.filter(swatch => {
-              const isValid = /^#[0-9A-Fa-f]{6}$/.test(swatch.haxcode);
-              if (!isValid) {
-                console.warn(`[${requestId}] Removing invalid hex from primary:`, swatch.haxcode);
-              }
-              return isValid;
-            })
-          },
-          secondary: {
-            ...validatedData.colorSections.secondary,
-            swatches: validatedData.colorSections.secondary.swatches.filter(swatch => {
-              const isValid = /^#[0-9A-Fa-f]{6}$/.test(swatch.haxcode);
-              if (!isValid) {
-                console.warn(`[${requestId}] Removing invalid hex from secondary:`, swatch.haxcode);
-              }
-              return isValid;
-            })
-          },
-          uiComponents: {
-            ...validatedData.colorSections.uiComponents,
-            swatches: validatedData.colorSections.uiComponents.swatches.filter(swatch => {
-              const isValid = /^#[0-9A-Fa-f]{6}$/.test(swatch.haxcode);
-              if (!isValid) {
-                console.warn(`[${requestId}] Removing invalid hex from uiComponents:`, swatch.haxcode);
-              }
-              return isValid;
-            })
-          },
-          utility: {
-            ...validatedData.colorSections.utility,
-            swatches: validatedData.colorSections.utility.swatches.filter(swatch => {
-              const isValid = /^#[0-9A-Fa-f]{6}$/.test(swatch.haxcode);
-              if (!isValid) {
-                console.warn(`[${requestId}] Removing invalid hex from utility:`, swatch.haxcode);
-              }
-              return isValid;
-            })
-          },
-          status: {
-            ...validatedData.colorSections.status,
-            swatches: validatedData.colorSections.status.swatches.filter(swatch => {
-              const isValid = /^#[0-9A-Fa-f]{6}$/.test(swatch.haxcode);
-              if (!isValid) {
-                console.warn(`[${requestId}] Removing invalid hex from status:`, swatch.haxcode);
-              }
-              return isValid;
-            })
-          }
+TYPOGRAPHY: At least 1 section with 1+ font styles
+
+Return ONLY the JSON object matching the schema, no additional text.`
+            },
+            ...imageURLs.map((url) => ({ 
+              type: "image" as const, 
+              image: url 
+            }))
+          ]
         }
-      };
+      ],
+      temperature: 0.2,
+      maxRetries: 2,
+    });
 
-      // Calculate final color counts
-      const finalColorCounts = {
-        primary: cleanData.colorSections.primary.swatches.length,
-        secondary: cleanData.colorSections.secondary.swatches.length,
-        uiComponents: cleanData.colorSections.uiComponents.swatches.length,
-        utility: cleanData.colorSections.utility.swatches.length,
-        status: cleanData.colorSections.status.swatches.length,
-      };
+    console.log(`[${requestId}] ✅ AI generation completed`);
 
-      const totalFinalColors = Object.values(finalColorCounts).reduce((a, b) => a + b, 0);
-      
-      console.log(`\n[${requestId}] 📊 FINAL COLOR COUNTS:`);
-      Object.entries(finalColorCounts).forEach(([key, count]) => {
-        console.log(`   ${key}: ${count} color(s)`);
-      });
-      console.log(`[${requestId}] 📈 Total colors: ${totalFinalColors}`);
-      
-      // Check typography
-      const typographySections = cleanData.typographySection.length;
-      const totalTypographyStyles = cleanData.typographySection.reduce(
-        (total, section) => total + section.style.length, 0
-      );
-      console.log(`[${requestId}] 📝 Typography: ${typographySections} section(s), ${totalTypographyStyles} style(s)`);
-
-      if (totalFinalColors < 5) {
-        console.warn(`[${requestId}] ⚠️ Warning: Generated style guide has fewer than 5 colors total`);
-      }
-
-      if (totalTypographyStyles === 0) {
-        console.warn(`[${requestId}] ⚠️ Warning: No typography styles generated`);
-      }
-
-      // ---------------- Return Success ----------------
-      console.log(`[${requestId}] ✅ Returning successful response`);
-      console.log(`=== [${requestId}] END Style Guide Generation ===\n`);
-      
-      return NextResponse.json({
-        ok: true,
-        message: "Style guide generated successfully",
-        styleGuide: cleanData,
-        // Include debug info in development
-        ...(process.env.NODE_ENV === 'development' && {
-          _debug: {
-            requestId,
-            imageCount: imageURLs.length,
-            generationTime: `${generationTime}ms`,
-            colorValidation: colorValidation,
-            finalColorCounts,
-            totalColors: totalFinalColors,
-            typographySections,
-            totalTypographyStyles,
-            timestamp: new Date().toISOString(),
-          }
-        }),
-      });
-    } catch (generationError) {
-      console.error(`[${requestId}] ❌ Error generating style guide:`, generationError);
-      
-      // Provide more specific error messages for Zod errors
-      if (generationError instanceof z.ZodError) {
-        console.error(`[${requestId}] Zod validation errors:`, generationError.issues);
-        const errorMessages = generationError.issues.map(issue => 
-          `${issue.path.join('.')}: ${issue.message}`
-        );
-        
-        return NextResponse.json(
-          { 
-            error: "Failed to generate valid style guide format",
-            details: errorMessages,
-            requestId
-          },
-          { status: 500 }
-        );
-      }
-      
-      return NextResponse.json(
-        { 
-          error: "Failed to generate style guide from images",
-          requestId
+    // 6. Validate and clean data
+    const validatedData = StyleGuideSchema.parse(result.object);
+    
+    const cleanData = {
+      ...validatedData,
+      colorSections: {
+        primary: {
+          ...validatedData.colorSections.primary,
+          swatches: validatedData.colorSections.primary.swatches
+            .filter(swatch => /^#[0-9A-Fa-f]{6}$/.test(swatch.haxColor))
+            .map(swatch => ({ ...swatch, haxColor: swatch.haxColor.toUpperCase() }))
         },
-        { status: 500 }
-      );
+        secondary: {
+          ...validatedData.colorSections.secondary,
+          swatches: validatedData.colorSections.secondary.swatches
+            .filter(swatch => /^#[0-9A-Fa-f]{6}$/.test(swatch.haxColor))
+            .map(swatch => ({ ...swatch, haxColor: swatch.haxColor.toUpperCase() }))
+        },
+        uiComponents: {
+          ...validatedData.colorSections.uiComponents,
+          swatches: validatedData.colorSections.uiComponents.swatches
+            .filter(swatch => /^#[0-9A-Fa-f]{6}$/.test(swatch.haxColor))
+            .map(swatch => ({ ...swatch, haxColor: swatch.haxColor.toUpperCase() }))
+        },
+        utility: {
+          ...validatedData.colorSections.utility,
+          swatches: validatedData.colorSections.utility.swatches
+            .filter(swatch => /^#[0-9A-Fa-f]{6}$/.test(swatch.haxColor))
+            .map(swatch => ({ ...swatch, haxColor: swatch.haxColor.toUpperCase() }))
+        },
+        status: {
+          ...validatedData.colorSections.status,
+          swatches: validatedData.colorSections.status.swatches
+            .filter(swatch => /^#[0-9A-Fa-f]{6}$/.test(swatch.haxColor))
+            .map(swatch => ({ ...swatch, haxColor: swatch.haxColor.toUpperCase() }))
+        }
+      }
+    };
+
+    // 7. Transform to Redux format
+    console.log(`[${requestId}] Transforming to Redux format...`);
+    const redaxStyleGuide = adaptAIToRedux(cleanData);
+    
+    console.log(`[${requestId}] Generated theme: ${redaxStyleGuide.theme}`);
+    console.log(`[${requestId}] Colors: ${redaxStyleGuide.colorSection.length} sections`);
+    console.log(`[${requestId}] Typography: ${redaxStyleGuide.typographySection.length} sections`);
+
+    // 8. SAVE TO DATABASE 
+    console.log(`[${requestId}] Saving to database...`);
+    
+    try {
+      // Initialize Convex client
+      const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+      if (!convexUrl) {
+        throw new Error("NEXT_PUBLIC_CONVEX_URL is not set");
+      }
+      
+      const { ConvexHttpClient } = await import("convex/browser");
+      const convex = new ConvexHttpClient(convexUrl);
+      
+      
+      const projectIdAsId = projectId as Id<"projects">;
+      
+      // Try to save using existing updateProjectSketches mutation
+      // Add styleGuide parameter to it
+      await convex.mutation(api.projects.updateProjectSketches, {
+        projectId: projectIdAsId,
+        sketchesData: {}, // Empty sketches data
+        styleGuide: JSON.stringify(redaxStyleGuide) // Add this to your mutation args
+      });
+      
+      console.log(`[${requestId}] ✅ Successfully saved to database`);
+      
+    } catch (dbError: any) {
+      console.error(`[${requestId}] ❌ Database save error:`, dbError.message);
+      console.log(`[${requestId}] ℹ️ Make sure updateProjectSketches accepts styleGuide parameter`);
     }
-  } catch (error) {
-    console.error(`[${requestId}] ❌ Unhandled error in route:`, error);
-    return NextResponse.json(
-      { 
-        error: "Internal server error",
-        requestId
-      },
-      { status: 500 }
-    );
+
+    // 9. Return success
+    console.log(`[${requestId}] ✅ Returning response`);
+    console.log(`=== [${requestId}] END ===\n`);
+    
+    return NextResponse.json({
+      ok: true,
+      message: "Style guide generated successfully",
+      styleGuide: redaxStyleGuide,
+    });
+    
+  } catch (error: any) {
+    console.error(`[${requestId}] ❌ Error:`, error.message || error);
+    console.error(`[${requestId}] ❌ Stack:`, error.stack);
+    
+    // More specific error messages
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ 
+        error: "Invalid AI response format", 
+        //@ts-ignore
+        details: error.errors 
+      }, { status: 500 });
+    }
+    
+    return NextResponse.json({ 
+      error: "Internal server error",
+      details: error.message 
+    }, { status: 500 });
   }
 }
