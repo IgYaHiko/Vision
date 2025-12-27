@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Insufficient credits" }, { status: 400 });
     }
 
-    // 2. Get moodboard images
+    // 2. Get moodboard images FIRST (we'll handle sketches differently)
     console.log(`[${requestId}] Fetching moodboard images...`);
     const moodboardImages = await MoodBoardQuery(projectId);
     if (!moodboardImages || moodboardImages.imges._valueJSON.length === 0) {
@@ -142,27 +142,6 @@ export async function POST(req: NextRequest) {
 
     console.log(`[${requestId}] Final system prompt length:`, systemPromptText.length);
     console.log(`[${requestId}] First 200 chars:`, systemPromptText.substring(0, 200));
-
-    // 4. Create the FULL prompt with requirements
-    const fullPrompt = `${systemPromptText}
-
-Analyze these ${imageURLs.length} moodboard image(s) and generate a design system.
-
-IMPORTANT FORMAT REQUIREMENTS:
-1. Use "haxColor" property name for all hex color codes (NOT "hex", "hexcode", etc.)
-2. All hex codes must be valid 6-character format: #RRGGBB (e.g., #1A2B3C)
-3. Return ONLY valid JSON that matches the schema
-
-COLOR SECTIONS (each must have at least 1 color):
-- Primary Colors: Main brand colors (1-4 colors)
-- Secondary & Accent Colors: Supporting colors (1-4 colors)
-- UI Component Colors: For buttons, cards, etc. (1-6 colors)
-- Utility & Form Colors: Neutral colors (1-3 colors)
-- Status & Feedback Colors: Success, warning, error (1-3 colors)
-
-TYPOGRAPHY: At least 1 section with 1+ font styles
-
-Return ONLY the JSON object matching the schema, no additional text.`;
 
     // 5. Generate AI style guide
     console.log(`[${requestId}] Generating AI style guide...`);
@@ -255,7 +234,7 @@ Return ONLY the JSON object matching the schema, no additional text.`
     console.log(`[${requestId}] Colors: ${redaxStyleGuide.colorSection.length} sections`);
     console.log(`[${requestId}] Typography: ${redaxStyleGuide.typographySection.length} sections`);
 
-    // 8. SAVE TO DATABASE 
+    // 8. SAVE TO DATABASE - Use dedicated style guide mutation
     console.log(`[${requestId}] Saving to database...`);
     
     try {
@@ -268,22 +247,74 @@ Return ONLY the JSON object matching the schema, no additional text.`
       const { ConvexHttpClient } = await import("convex/browser");
       const convex = new ConvexHttpClient(convexUrl);
       
-      
       const projectIdAsId = projectId as Id<"projects">;
       
-      // Try to save using existing updateProjectSketches mutation
-      // Add styleGuide parameter to it
-      await convex.mutation(api.projects.updateProjectSketches, {
+      // OPTION 1: Use the dedicated updateProjectStyleGuide mutation
+      // This only updates styleGuide, doesn't touch sketchesData
+      await convex.mutation(api.projects.updateProjectStyleGuide, {
         projectId: projectIdAsId,
-        sketchesData: {}, // Empty sketches data
-        styleGuide: JSON.stringify(redaxStyleGuide) // Add this to your mutation args
+        styleGuide: JSON.stringify(redaxStyleGuide)
       });
       
-      console.log(`[${requestId}] ✅ Successfully saved to database`);
+      console.log(`[${requestId}] ✅ Successfully saved style guide using dedicated mutation`);
       
     } catch (dbError: any) {
       console.error(`[${requestId}] ❌ Database save error:`, dbError.message);
-      console.log(`[${requestId}] ℹ️ Make sure updateProjectSketches accepts styleGuide parameter`);
+      console.log(`[${requestId}] Trying alternative save method...`);
+      
+      // OPTION 2: Try updateProject mutation
+      try {
+        const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+        if (!convexUrl) throw new Error("NEXT_PUBLIC_CONVEX_URL not set");
+        
+        const { ConvexHttpClient } = await import("convex/browser");
+        const convex = new ConvexHttpClient(convexUrl);
+        const projectIdAsId = projectId as Id<"projects">;
+        
+        await convex.mutation(api.projects.updateProject, {
+          projectId: projectIdAsId,
+          styleGuide: JSON.stringify(redaxStyleGuide)
+        });
+        
+        console.log(`[${requestId}] ✅ Fallback save successful using updateProject`);
+      } catch (fallbackError: any) {
+        console.error(`[${requestId}] ❌ Fallback also failed:`, fallbackError.message);
+        
+        // OPTION 3: Last resort - Fetch existing project first
+        try {
+          console.log(`[${requestId}] Trying last resort: fetching project to preserve sketches...`);
+          
+          // Import and use the direct get query
+          const { api } = await import("../../../../../convex/_generated/api");
+          const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+          if (!convexUrl) throw new Error("NEXT_PUBLIC_CONVEX_URL not set");
+          
+          const { ConvexHttpClient } = await import("convex/browser");
+          const convex = new ConvexHttpClient(convexUrl);
+          const projectIdAsId = projectId as Id<"projects">;
+          
+          // Get the project directly using the get query
+          const project = await convex.query(api.projects.getProjects, { 
+            projectId: projectIdAsId 
+          });
+          
+          if (!project) {
+            throw new Error("Project not found");
+          }
+          
+          // Use updateProjectSketches with existing sketchesData
+          await convex.mutation(api.projects.updateProjectSketches, {
+            projectId: projectIdAsId,
+            sketchesData: project.sketchesData || {}, // Use existing sketches
+            styleGuide: JSON.stringify(redaxStyleGuide)
+          });
+          
+          console.log(`[${requestId}] ✅ Last resort save successful - preserved sketches`);
+        } catch (lastResortError: any) {
+          console.error(`[${requestId}] ❌ All save methods failed:`, lastResortError.message);
+          throw lastResortError;
+        }
+      }
     }
 
     // 9. Return success
@@ -294,6 +325,7 @@ Return ONLY the JSON object matching the schema, no additional text.`
       ok: true,
       message: "Style guide generated successfully",
       styleGuide: redaxStyleGuide,
+      preservedSketches: true
     });
     
   } catch (error: any) {
