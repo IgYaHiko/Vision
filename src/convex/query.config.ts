@@ -104,3 +104,14 @@ export const CreditBalanceQurey = async () => {
 
      return {ok: true, balance: balance._valueJSON, profileInfo}
 }
+
+
+export const InspirationImageQuery = async (projectId: string) => {
+    const inspirationImage = await preloadQuery(
+      api.inspiration.getInspirationOnImages,
+      {projectId: projectId as Id<'projects'>},
+      {token: await convexAuthNextjsToken()}
+    )
+
+    return {inspirationImage}
+}
