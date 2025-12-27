@@ -140,7 +140,7 @@ const Page = async ({ searchParams }: Props) => {
                   Upload images to your mood board and generate an AI-powered style guide with colors and typography.
                 </p>
                 {/* Debug info */}
-                <div className='mt-4 p-3 bg-gray-100 rounded text-xs text-left max-w-md'>
+               {/*  <div className='mt-4 p-3 bg-gray-100 rounded text-xs text-left max-w-md'>
                   <p><strong>Debug Info:</strong></p>
                   <p>Project ID: {projectId}</p>
                   <p>Style Guide Found: {existingStyleGuide ? 'Yes' : 'No'}</p>
@@ -149,7 +149,7 @@ const Page = async ({ searchParams }: Props) => {
                   <p>colorSection exists: {parsedGuide?.colorSection ? 'Yes' : 'No'}</p>
                   <p>colorSection is array: {Array.isArray(parsedGuide?.colorSection) ? 'Yes' : 'No'}</p>
                   <p>Processed colors: {colorGuide.length}</p>
-                </div>
+                </div> */}
               </div>
             </div>
           </div>

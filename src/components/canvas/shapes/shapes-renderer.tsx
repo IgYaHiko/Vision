@@ -7,6 +7,7 @@ import { Line } from './line';
 import { Text } from './text';
 import { Stroke } from './stroke';
 import { Frame } from './frame';
+import GeneratedUI from './generatedui';
 //TODO: Add frame button
 //TODO: Add generate ui button
 interface Props {
@@ -41,6 +42,16 @@ const ShapesRenderer = ({
           return <Text shape={shape} />
         case "freedraw":
            return <Stroke shape={shape} />
+        case "generatedui":
+           return  <GeneratedUI
+                      shapes={shape}
+                      toggleChat={toggleChat}
+                      generatedWorkflow={generateWorkFlow}
+                      exportDesign={exportDesign}
+
+                    />
+        default:
+           return null
     }
 }
 
