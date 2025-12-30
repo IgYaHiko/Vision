@@ -1,9 +1,12 @@
 import { CreditBalanceQurey, InspirationImageQuery, StyleGuideQuery } from "@/convex/query.config";
 import { prompts } from "@/prompts";
+import { google } from "@ai-sdk/google";
+import { streamText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req:NextRequest) {
-    const formdata = await req.formData()
+   try {
+      const formdata = await req.formData()
     const imagefile = formdata.get('image') as File
     const projectId = formdata.get('projectId') as string
     if (!imagefile) {
@@ -89,4 +92,76 @@ On conflicts: the styleGuide always wins over image cues
       )
       .join(", ")}`
     
+    const result = streamText({
+        model: google('gemini-2.5-flash'),
+        messages: [
+            {
+                 role: "user",
+                 content: [
+                    { 
+                        type: 'text',
+                        text: userPrompt
+                    },
+                    {
+                         type: 'image',
+                         image: base64Image
+                    },
+                    ...imageurl.map((url) => ({
+                        type: 'image' as const,
+                        image: url 
+                    }))
+                 ]
+            }
+        ],
+        system: systemPrompt,
+        temperature: 0.4
+
+    })
+
+    const steam = new ReadableStream({
+        async start(controller) {
+             let totalChunk = 0;
+             let totalLength = 0;
+             let accumulateContent = ""
+
+
+             try {
+               for await (const chunk of result.textStream) {
+                  totalChunk++
+                  totalLength += chunk.length
+                  accumulateContent += chunk
+
+
+                  const encoder = new TextEncoder()
+                  controller.enqueue(encoder.encode(chunk))
+               }
+
+                controller.close()
+             } catch (error) {
+                controller.error(error)
+             }
+        }
+          
+         
+    })
+
+
+    return new Response(steam, {
+        headers: {
+             'Content-Type': "text/html; charset=utf-8",
+             'Cache-Control': 'no-cache',
+             Connect: 'keep-alive'
+         }
+    })
+
+    
+   } catch (error) {
+     return NextResponse.json(
+        {
+            error: "Failed to generate UI design",
+            details: error instanceof Error ? error.message : "unknown error"
+        },
+        { status: 500 }
+     )
+   }
 }

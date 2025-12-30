@@ -12,6 +12,7 @@ import { FreeDrawStrokePreview } from "../shapes/stroke/preview";
 import { SelectionOverlay } from "../shapes/selectionOverlay";
 import { useAppSelector } from "@/redux/store";
 import { FramePreview } from "../shapes/frame/preview";
+import { useInspiration } from "@/hooks/use-inspiration";
 
 const InfiniteCastle = () => {
   const {
@@ -33,6 +34,8 @@ const InfiniteCastle = () => {
   const draftShape = getDraftShape()
   const freeDraw = getFreeDrawPoints()
   const selectedShapes = useAppSelector((s) => s.shapes.selected)
+  const {closeInspiration,isInspirationOpen,openInspiration,toggleInspiration} = useInspiration()
+  
   return (
    <>
     <TextSideBar isOpen={isSidebarOpen && hasSelectedText} />
@@ -73,7 +76,9 @@ const InfiniteCastle = () => {
         shapes.map((shape) => (
             
             <ShapesRenderer 
-            
+            toggleInspiraton={toggleInspiration}
+          
+
             shape={shape} key={shape.id} />
         ))
       }
