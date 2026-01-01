@@ -13,6 +13,7 @@ import { SelectionOverlay } from "../shapes/selectionOverlay";
 import { useAppSelector } from "@/redux/store";
 import { FramePreview } from "../shapes/frame/preview";
 import { useInspiration } from "@/hooks/use-inspiration";
+import InspirationSidebar from "./inspiration-sidebar";
 
 const InfiniteCastle = () => {
   const {
@@ -39,6 +40,11 @@ const InfiniteCastle = () => {
   return (
    <>
     <TextSideBar isOpen={isSidebarOpen && hasSelectedText} />
+    <InspirationSidebar
+     isInspirationOpen={isInspirationOpen}
+     onclose={closeInspiration}
+    />
+    {/* chat window */}
      <div
       aria-label="Infinite drawing castle"
       role='application'
