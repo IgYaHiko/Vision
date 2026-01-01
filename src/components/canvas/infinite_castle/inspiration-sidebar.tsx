@@ -2,7 +2,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { ImageIcon, Upload, X } from 'lucide-react'
-import React from 'react'
+import { useSearchParams } from 'next/navigation'
+import React, { useRef, useState } from 'react'
+import { mutation } from '../../../../convex/_generated/server'
+import { useMutation } from 'convex/react'
+import { api } from '../../../../convex/_generated/api'
 
 interface Props {
      isInspirationOpen: boolean
@@ -10,6 +14,15 @@ interface Props {
     
 }
 const InspirationSidebar = ({isInspirationOpen,onclose}: Props) => {
+
+  const [image, setImage] = useState<Props[]>([]);
+  const [dragActivity, setDragActivity] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const searchParams = useSearchParams()
+  const projectId = searchParams.get('project')
+  const generateUploadURl = useMutation(api.inspiration.generateInspiredImageUrl)
+  const addImages = useMutation(api.inspiration.addInspiredImages)
+  const removeInsImg = useMutation(api.inspiration.removeInspireImages)
   return (
       <div
        className={
