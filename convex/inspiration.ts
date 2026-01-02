@@ -3,16 +3,16 @@ import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
 export const generateInspiredImageUrl = mutation({
-     handler: async (ctx) => {
-         const userId = await getAuthUserId(ctx)
-         if(!userId) {
-             throw new Error("Not authenticated")
-         }
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) throw new Error("Not authenticated")
 
-         // Generate upload URL
-         await ctx.storage.generateUploadUrl()
-     }
+    // ✅ returns string
+    return await ctx.storage.generateUploadUrl()
+  },
 })
+
+
 export const getInspirationOnImages = query({
     args: {
         projectId: v.id('projects'),
