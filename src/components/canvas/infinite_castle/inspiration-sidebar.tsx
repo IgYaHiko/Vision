@@ -11,6 +11,7 @@ import { Id } from '../../../../convex/_generated/dataModel'
 import { addInspiredImages } from '../../../../convex/inspiration'
 import { Label } from '@/components/ui/label'
 import Image from 'next/image'
+import { toast } from 'sonner'
 
 interface InspirationSidebarProps {
      isInspirationOpen: boolean;
@@ -42,27 +43,34 @@ const InspirationSidebar = ({isInspirationOpen,onclose}: InspirationSidebarProps
     api.inspiration.getInspirationOnImages, 
     projectId ? {projectId: projectId as Id<'projects'>} : "skip"
 )
+  const isLoadingImages = existingImg === undefined
+ 
+
    useEffect(() => {
-       if(existingImg && existingImg.length > 0) {
-         const serverImg: Props[] = existingImg.map((img) => ({
-             id: img.id,
-             storageId: img.storageId,
-             url: img.url || undefined,
-             uploaded: true,
-             uploading: true,
-             isFromServer: true
-         }))
+  if (existingImg === undefined) return // ⛔ wait
 
-         setImage((p) => {
-             const localImg = p.filter((img) => !img.isFromServer)
-             return [...serverImg, ...localImg]
-         })
-       } else if(existingImg && existingImg.length === 0) {
-             setImage((p) => p.filter((i) => !i.isFromServer))
-       }
-   },[existingImg])
+  if (existingImg.length > 0) {
+    const serverImg: Props[] = existingImg.map((img) => ({
+      id: img.id,
+      storageId: img.storageId,
+      url: img.url || undefined,
+      uploaded: true,
+      uploading: false,
+      isFromServer: true,
+    }))
 
-   const uploadImg = useCallback(
+    setImage((prev) => {
+      const localImg = prev.filter((img) => !img.isFromServer)
+      return [...serverImg, ...localImg]
+    })
+  } else {
+    // loaded & empty
+    setImage((prev) => prev.filter((img) => !img.isFromServer))
+  }
+}, [existingImg])
+
+
+  /*  const uploadImg = useCallback(
   async (file: File): Promise<{ storageId: string }> => {
        try {
           const uploadUrl = await generateUploadURl()
@@ -99,7 +107,48 @@ const InspirationSidebar = ({isInspirationOpen,onclose}: InspirationSidebarProps
        }
   },
   [generateUploadURl,addImages, projectId]
-)
+) */
+
+const uploadImg = async (
+  file: File
+): Promise<{ storageId: string }> => {
+  try {
+    const uploadUrl = await generateUploadURl()
+
+    if (!uploadUrl || typeof uploadUrl !== "string") {
+      throw new Error("Failed to generate upload URL")
+    }
+
+    const res = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    })
+
+    if (!res.ok) {
+      throw new Error("Upload failed")
+    }
+
+    const data = await res.json()
+
+    if (!data?.storageId) {
+      throw new Error("storageId missing")
+    }
+
+    await addImages({
+      projectId: projectId as Id<"projects">,
+      storageId: data.storageId as Id<"_storage">,
+    })
+
+    // ✅ RETURN OBJECT
+    return { storageId: data.storageId }
+  } catch (error) {
+    console.error(error)
+    throw error
+  }
+}
+
+
 
 
    const handleFileSelect = useCallback((files: FileList | null) => {
@@ -161,7 +210,82 @@ const InspirationSidebar = ({isInspirationOpen,onclose}: InspirationSidebarProps
             }
    },[])
 
-  const clearAllimg = () => {}
+
+// Single image removal function
+  const removeSingleImage = useCallback(async (imageToRemove: Props) => {
+    // Clean up object URL for local images
+    if (imageToRemove.url && !imageToRemove.isFromServer && imageToRemove.url.startsWith('blob:')) {
+      URL.revokeObjectURL(imageToRemove.url);
+    }
+
+    // Remove from server if it exists there
+    if (imageToRemove.isFromServer && imageToRemove.storageId && projectId) {
+      try {
+        await removeInsImg({
+          projectId: projectId as Id<'projects'>,
+          storageId: imageToRemove.storageId as Id<'_storage'>
+        });
+        toast.success("Image removed successfully");
+      } catch (error) {
+        console.error("Failed to remove image:", error);
+        toast.error("Failed to remove image");
+        // Still remove from UI even if server fails
+      }
+    }
+
+    // Remove from local state
+    setImage(prev => prev.filter(img => img.id !== imageToRemove.id));
+  }, [projectId, removeInsImg]);
+
+
+ const clearAllimg = useCallback(async () => {
+    if (image.length === 0) return;
+
+    const imagesToRemove = image.filter((img) => 
+      img.storageId && img.isFromServer
+    );
+
+    // Remove from server
+    if (projectId && imagesToRemove.length > 0) {
+      try {
+        // Remove all server image
+        await Promise.all(
+          imagesToRemove.map(img => 
+            removeInsImg({
+              projectId: projectId as Id<'projects'>,
+              storageId: img.storageId as Id<'_storage'>
+            })
+          )
+        );
+        toast.success("All image removed successfully");
+      } catch (error) {
+        console.error("Failed to remove some image:", error);
+        toast.error("Failed to remove some image");
+      }
+    }
+
+    // Clean up all object URLs
+    image.forEach(img => {
+      if (img.url && !img.isFromServer && img.url.startsWith('blob:')) {
+        URL.revokeObjectURL(img.url);
+      }
+    });
+
+    // Clear all image from state
+    setImage([]);
+  }, [image, projectId, removeInsImg]);
+
+  // Clean up object URLs on component unmount
+  useEffect(() => {
+    return () => {
+      image.forEach(img => {
+        if (img.url && !img.isFromServer && img.url.startsWith('blob:')) {
+          URL.revokeObjectURL(img.url);
+        }
+      });
+    };
+  }, [image]);
+
    const handleDrop = useCallback((e: React.DragEvent) => {
           e.preventDefault()
           e.stopPropagation()
@@ -246,7 +370,7 @@ const InspirationSidebar = ({isInspirationOpen,onclose}: InspirationSidebarProps
         </div>
            
                    {
-                    image.length && (
+                    (isLoadingImages || image.length) && (
                          <div className='space'>
                         <div className='flex items-center justify-between'>
                             <Label className='font-mono text-xs'>
@@ -263,20 +387,55 @@ const InspirationSidebar = ({isInspirationOpen,onclose}: InspirationSidebarProps
                             Clear All
                            </Button>
                         </div>
+<div className="grid grid-cols-2 gap-4 mt-4">
+  {/* Render all uploaded images */}
+  {image.map((imag) => (
+    <div
+      key={imag.id}
+      className="group relative w-full aspect-square overflow-hidden rounded-lg bg-white/5"
+    >
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          removeSingleImage(imag)
+        }}
+        className="
+          absolute top-2 right-2 z-20
+          rounded-full bg-red-500 p-1
+          opacity-0 scale-75
+          transition-all duration-200
+          group-hover:opacity-100 group-hover:scale-100
+          cursor-pointer
+        "
+      >
+        <X size={10} />
+      </button>
 
-                        <div className=' grid grid-cols-2'>
-                            {
-                                image.map((imag) => (
-                                    <Image
-                                     key={imag.id}
-                                     width={100}
-                                     height={100}
-                                     src={imag.url || "f"}
-                                     alt=''
-                                    />
-                                ))
-                            }
-                        </div>
+      {imag.url && (
+        <Image
+          src={imag.url}
+          alt="inspiration"
+          fill
+          className="object-cover"
+        />
+      )}
+    </div>
+  ))}
+
+  {/* Show loading skeletons ONLY when isLoadingImages is true */}
+  {isLoadingImages && (
+    // Create skeletons for remaining slots (total 6)
+    [...Array(Math.max(0, 1 - image.length))].map((_, i) => (
+      <div
+        key={`skeleton-${i}`}
+        className="w-full aspect-square rounded-lg bg-white/10 animate-pulse"
+      />
+    ))
+  )}
+</div>
+
+
+
                     </div>
                     )
                    }
