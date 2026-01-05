@@ -14,6 +14,7 @@ import { useAppSelector } from "@/redux/store";
 import { FramePreview } from "../shapes/frame/preview";
 import { useInspiration } from "@/hooks/use-inspiration";
 import InspirationSidebar from "./inspiration-sidebar";
+import { X } from "lucide-react";
 
 const InfiniteCastle = () => {
   const {
@@ -36,14 +37,36 @@ const InfiniteCastle = () => {
   const freeDraw = getFreeDrawPoints()
   const selectedShapes = useAppSelector((s) => s.shapes.selected)
   const {closeInspiration,isInspirationOpen,openInspiration,toggleInspiration} = useInspiration()
+  const handleClose = () => {
+      console.log("close the window")
+      closeInspiration()
+  }
   
   return (
    <>
     <TextSideBar isOpen={isSidebarOpen && hasSelectedText} />
-    <InspirationSidebar
-     isInspirationOpen={isInspirationOpen}
-     onclose={closeInspiration}
-    />
+   
+       <div
+       onClick={toggleInspiration}
+  className={cn(
+    "fixed top-0 left-0 h-full w-80 z-40",
+    "transition-transform duration-300 ease-in-out",
+    "bg-transparent  border-none outline-none shadow-none ",
+    {
+      "-translate-x-full": !isInspirationOpen,
+      "translate-x-0": isInspirationOpen,
+    }
+  )}
+>
+ 
+  <InspirationSidebar
+  
+    isInspirationOpen={isInspirationOpen}
+    onclose={handleClose}
+  />
+</div>
+
+     
     {/* chat window */}
      <div
       aria-label="Infinite drawing castle"

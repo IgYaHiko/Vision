@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { ImageIcon, Trash, Upload, X } from 'lucide-react'
+import { ImageIcon, Plus, PlusCircle, PlusCircleIcon, Trash, Upload, X } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { mutation } from '../../../../convex/_generated/server'
@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 interface InspirationSidebarProps {
      isInspirationOpen: boolean;
      onclose: () => void;
+     
     
 }
 
@@ -298,22 +299,29 @@ const uploadImg = async (
       <div
        className={
         cn(
-             "fixed left-5 top-1/2 -translate-y-1/2 w-80 p-4 z-50 rounded-lg backdrop-blur-2xl backdrop-saturate-150  border border-white/[0.12] shadow-xl shadow-black/20 transition-transform duration-300 ",
 
+             
+             "fixed left-5 top-1/2 -translate-y-1/2 w-80 p-4 z-50 rounded-lg backdrop-blur-2xl backdrop-saturate-150  border border-white/[0.12] shadow-xl shadow-black/20 transition-transform duration-300 ",
+                //background
               'bg-[#0c0c0c] border-white/10',
-                   'shadow-[inset_2px_2px_6px_rgba(0,0,0,0.8),inset_-2px_-2px_6px_rgba(255,255,255,0.07),0_1px_4px_rgba(0,0,0,0.6)]'
+                   'shadow-[inset_2px_2px_6px_rgba(0,0,0,0.8),inset_-2px_-2px_6px_rgba(255,255,255,0.07),0_1px_4px_rgba(0,0,0,0.6)]',
+
+              //visibility 
+            
+
+
         )
        }
       >
         <div className='py-4 px-2 flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-8rem)]'>
-            <div className='flex items-center justify-between'>
+            <div className='flex items-center justify-between mb-4'>
                 <ImageIcon size={17} />
                 <p className='font-mono text-xs'>Inspiration Image</p>
             </div>
 
-            <div>
+           {/*  <div className='z-[999]'>
               <X className='cursor-pointer' onClick={onclose} size={20} />
-            </div>
+            </div> */}
 
 
             <div
@@ -420,7 +428,19 @@ const uploadImg = async (
         />
       )}
     </div>
+    
   ))}
+
+  {
+    image.length < 6 && (
+        <button
+         onClick={() => fileInputRef.current?.click()}
+         className='aspect-square border border-dashed rounded-lg cursor-pointer hover:border-white/20 transition-all duration-300 flex items-center justify-center group'
+        >
+        <Plus className='w-6 h-6 text-white/20 group-hover:text-white/50 transition-all duration-300' />
+        </button>
+    )
+  }
 
   {/* Show loading skeletons ONLY when isLoadingImages is true */}
   {isLoadingImages && (
